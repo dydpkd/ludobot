@@ -3,7 +3,7 @@
 """
 Ludooman Bot — Telegram slot 🎰 tracker
 - Silent count of 🎰 spins in groups
-- On triple (jackpot) sends a random phrase from a preset list
+- On triple (jackpot) sends a random phrase from a preset list (with 2s delay)
 - SQLite stats (persistent with Railway Volume)
 - Commands: /mystats, /stats, /help
 
@@ -13,7 +13,7 @@ ENV:
   WEBHOOK_BASE   - enable webhook (https://YOUR.up.railway.app)
   WEBHOOK_PATH   - optional fixed webhook path
 """
-import os, sqlite3, logging, hashlib, random
+import os, sqlite3, logging, hashlib, random, asyncio
 from typing import Tuple
 from telegram import Update
 from telegram.constants import ParseMode
@@ -150,7 +150,7 @@ def upsert_result(chat_id:int, user_id:int, username:str, combo:str):
         """,(chat_id,user_id,username,combo))
         c.execute("""
         INSERT INTO totals(chat_id,user_id,spins) VALUES(?,?,1)
-        ON CONFLICT(chat_id,user_id) DO UPDATE SET spins = spins + 1
+        ON CONFLICT(chat_id,user_id) DO UPDATE SET spins = pins + 1
         """,(chat_id,user_id))
 
 def fetch_user_stats(chat_id:int, user_id:int):
@@ -214,9 +214,10 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.full_name or (user.username and f"@{user.username}") or str(user.id)
     upsert_result(update.effective_chat.id, user.id, username, combo_key)
 
-    # if triple (jackpot) -> send random phrase
+    # if triple (jackpot) -> 2s delay + random phrase
     if combo_tuple[0] == combo_tuple[1] == combo_tuple[2]:
         try:
+            await asyncio.sleep(2)  # <-- неблокирующая задержка
             phrase = random.choice(JACKPOT_PHRASES)
             await m.reply_text(phrase)  # reply to the jackpot message
         except Exception:
@@ -281,7 +282,6 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("")
     if luck_rows:
         for idx, (rate, u, per_n) in enumerate(luck_rows, start=1):
-            # CHANGED HERE: "(≈1 per N spins)" -> "(≈1/N)"
             lines.append(f"{idx}. {u} — {rate:.3f} (≈1/{per_n})")
     else:
         lines.append("—")
@@ -321,7 +321,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/mystats — your stats\n"
         "/stats — leaders by triple matches (with totals & luck list)\n"
         "/help — this help\n\n"
-        "Send 🎰 in the chat — I count it silently. Triples trigger a random phrase 😉"
+        "Send 🎰 in the chat — I count it silently. Triples trigger a random phrase (after 2s) 😉"
     )
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
