@@ -150,7 +150,7 @@ async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pretty = " ".join(EMOJI[x] for x in combo.split("|"))
         lines.append(f"{pretty} — {cnt}")
     name = user.full_name or (user.username and f"@{user.username}") or str(user.id)
-    await update.message.reply_text(f"Top combos — {name}:\n" + "\n".join(lines) + f"\n\nTotal spins: {total}")
+    await update.message.reply_text(f"<b>Top combos</b> — {name}:\n" + "\n".join(lines) + f"\n\n<b>Total spins</b>: {total}")
 
 def _compact_combo(key: str) -> str:
     # "seven|seven|seven" -> "7️⃣7️⃣7️⃣"  (без пробелов)
