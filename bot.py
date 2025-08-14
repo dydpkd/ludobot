@@ -12,7 +12,7 @@ Deploy:
 Env:
   TG_TOKEN       - BotFather token (required)
   DB_PATH        - SQLite file path (default: ./casino_stats.sqlite3)
-  WEBHOOK_BASE   - Public HTTPS base URL for webhook, e.g. https://your-app.onrender.com
+  WEBHOOK_BASE   - Public HTTPS base URL for webhook, e.g. https://your-app.up.railway.app
   WEBHOOK_PATH   - Optional fixed webhook path (default: /telegram/<short-hash>)
 """
 import os, sqlite3, logging, hashlib
@@ -29,13 +29,13 @@ WEBHOOK_BASE = os.getenv("WEBHOOK_BASE")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH")  # optional
 PORT = int(os.getenv("PORT", "8080"))
 
-# ---- mapping of 1..64 to slot symbols (BAR, 🍇, 🍋, 7️⃣) ----
+# ---- mapping of 1..64 to slot symbols (🍺, 🍇, 🍋, 7️⃣) ----
 slot_value = {
     1: ("bar","bar","bar"), 2: ("grape","bar","bar"), 3: ("lemon","bar","bar"), 4: ("seven","bar","bar"),
     5: ("bar","grape","bar"), 6: ("grape","grape","bar"), 7: ("lemon","grape","bar"), 8: ("seven","grape","bar"),
     9: ("bar","lemon","bar"),10: ("grape","lemon","bar"),11: ("lemon","lemon","bar"),12: ("seven","lemon","bar"),
    13: ("bar","seven","bar"),14: ("grape","seven","bar"),15: ("lemon","seven","bar"),16: ("seven","seven","bar"),
-   17: ("bar","bar","grape"),18: ("grape","бар","grape"),19: ("lemon","bar","grape"),20: ("seven","bar","grape"),
+   17: ("bar","bar","grape"),18: ("grape","bar","grape"),19: ("lemon","bar","grape"),20: ("seven","bar","grape"),
    21: ("bar","grape","grape"),22: ("grape","grape","grape"),23: ("lemon","grape","grape"),24: ("seven","grape","grape"),
    25: ("bar","lemon","grape"),26: ("grape","lemon","grape"),27: ("lemon","lemon","grape"),28: ("seven","lemon","grape"),
    29: ("bar","seven","grape"),30: ("grape","seven","grape"),31: ("lemon","seven","grape"),32: ("seven","seven","grape"),
@@ -48,10 +48,11 @@ slot_value = {
    57: ("bar","lemon","seven"),58: ("grape","lemon","seven"),59: ("lemon","lemon","seven"),60: ("seven","lemon","seven"),
    61: ("bar","seven","seven"),62: ("grape","seven","seven"),63: ("lemon","seven","seven"),64: ("seven","seven","seven"),
 }
-EMOJI = {"bar":"BAR", "grape":"🍇", "lemon":"🍋", "seven":"7️⃣"}
+EMOJI = {"bar":"🍺", "grape":"🍇", "lemon":"🍋", "seven":"7️⃣"}
 
 # ---- DB ----
 _conn = None
+
 def get_conn() -> sqlite3.Connection:
     global _conn
     if _conn is None:
@@ -120,7 +121,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not d or d.emoji != "🎰":
         return
 
-    # ✅ Корректная проверка «переслано» для PTB v20+:
+    # корректная проверка «переслано» для PTB v20+:
     if any(getattr(m, attr, None) for attr in ("forward_origin", "forward_from", "forward_from_chat", "forward_sender_name")) \
        or getattr(m, "is_automatic_forward", False):
         return
@@ -134,8 +135,8 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.full_name or (user.username and f"@{user.username}") or str(user.id)
     upsert_result(update.effective_chat.id, user.id, username, combo_key)
 
-    pretty = " ".join(EMOJI[x] for x in combo_tuple)
-    await m.reply_text(f"Counted for {username}: {pretty}")
+    # По запросу: никаких ответов на каждую крутку
+    # (оставляем тишину, чтобы не спамить чат)
 
 async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -144,12 +145,17 @@ async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not rows:
         await update.message.reply_text("No data yet. Send 🎰 and come back.")
         return
+    name = user.full_name or user.first_name or "You"
     lines = []
     for combo, cnt in rows[:15]:
         pretty = " ".join(EMOJI[x] for x in combo.split("|"))
         lines.append(f"{pretty} — {cnt}")
     await update.message.reply_text(
-        "Your top combos:\n" + "\n".join(lines) + f"\n\nTotal spins: {total}"
+        f"Top combos — {name}:
+" + "
+".join(lines) + f"
+
+Total spins: {total}"
     )
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -163,23 +169,36 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for username, combo, c in board:
         by_combo[combo].append(f"{username} — {c}")
     def pretty_combo(k): return " ".join(EMOJI[x] for x in k.split("|"))
-    text = "Leaders (triple matches):\n\n" + "\n\n".join(
-        f"{pretty_combo(k)}:\n" + "\n".join(v[:5]) if v else f"{pretty_combo(k)}: —"
+    text = "Leaders (triple matches):
+
+" + "
+
+".join(
+        f"{pretty_combo(k)}:
+" + "
+".join(v[:5]) if v else f"{pretty_combo(k)}: —"
         for k, v in by_combo.items()
     )
     await update.message.reply_text(text)
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Commands:\n"
-        "/mystats — your stats\n"
-        "/stats — leaders by triple matches\n"
-        "/help — this help\n\n"
+        "Commands:
+"
+        "/mystats — your stats
+"
+        "/stats — leaders by triple matches
+"
+        "/help — this help
+
+"
         "Just send 🎰 in the chat — the bot will count everything."
     )
 
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
+    log.exception("Error while handling update", exc_info=context.error)
+
 def webhook_path_from_token(token: str) -> str:
-    # short, non-revealing path derived from token hash
     h = hashlib.sha256(token.encode()).hexdigest()[:16]
     return f"/telegram/{h}"
 
@@ -188,12 +207,12 @@ def build_app() -> Application:
         raise SystemExit("Set TG_TOKEN env var")
     app = Application.builder().token(TOKEN).build()
 
-    # 🎯 важная правка фильтра — ловим именно слот 🎰
+    # ловим именно 🎰
     app.add_handler(MessageHandler(filters.Dice.SLOT_MACHINE, on_dice))
-
     app.add_handler(CommandHandler("mystats", cmd_mystats))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("help", cmd_help))
+    app.add_error_handler(on_error)
     return app
 
 def main():
