@@ -217,7 +217,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # if triple (jackpot) -> 2s delay + random phrase
     if combo_tuple[0] == combo_tuple[1] == combo_tuple[2]:
         try:
-            await asyncio.sleep(2)  # неблокирующая задержка
+            await asyncio.sleep(3)  # неблокирующая задержка
             phrase = random.choice(JACKPOT_PHRASES)
             await m.reply_text(phrase)  # reply to the jackpot message
         except Exception:
