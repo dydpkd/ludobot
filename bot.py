@@ -119,7 +119,7 @@ def get_conn() -> sqlite3.Connection:
             os.makedirs("/tmp", exist_ok=True)
             _conn = sqlite3.connect(fallback, check_same_thread=False)
 
-        _conn.execute("""
+        __conn.execute("""
         CREATE TABLE IF NOT EXISTS results(
             chat_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
@@ -149,8 +149,8 @@ def upsert_result(chat_id:int, user_id:int, username:str, combo:str):
            username = excluded.username
         """,(chat_id,user_id,username,combo))
         c.execute("""
-        INSERT INTO totals(chat_id,user_id,spins) VALUES(?,?,1)
-        ON CONFLICT(chat_id,user_id) DO UPDATE SET spins = pins + 1
+        INSERT INTO totals(chat_id,user_id,spins) VALUES(?, ?, 1)
+        ON CONFLICT(chat_id,user_id) DO UPDATE SET spins = spins + 1
         """,(chat_id,user_id))
 
 def fetch_user_stats(chat_id:int, user_id:int):
@@ -217,7 +217,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # if triple (jackpot) -> 2s delay + random phrase
     if combo_tuple[0] == combo_tuple[1] == combo_tuple[2]:
         try:
-            await asyncio.sleep(2)  # <-- неблокирующая задержка
+            await asyncio.sleep(2)  # неблокирующая задержка
             phrase = random.choice(JACKPOT_PHRASES)
             await m.reply_text(phrase)  # reply to the jackpot message
         except Exception:
