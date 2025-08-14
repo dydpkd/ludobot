@@ -119,6 +119,11 @@ def fetch_leaderboard(chat_id:int, combos:Tuple[str,...]):
       ORDER BY combo, c DESC
     """, (chat_id, *combos)).fetchall()
 
+# ---- Helpers ----
+def _compact_combo(key: str) -> str:
+    # "seven|seven|seven" -> "7️⃣7️⃣7️⃣"  (без пробелов)
+    return "".join(EMOJI[x] for x in key.split("|"))
+
 # ---- Handlers ----
 async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     m = update.effective_message
@@ -145,16 +150,22 @@ async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not rows:
         await update.message.reply_text("No data yet. Send 🎰 and come back.")
         return
-    lines = []
-    for combo, cnt in rows[:15]:
-        pretty = " ".join(EMOJI[x] for x in combo.split("|"))
-        lines.append(f"{pretty} — {cnt}")
-    name = user.full_name or (user.username and f"@{user.username}") or str(user.id)
-    await update.message.reply_text(f"<b>Top combos</b> — {name}:\n" + "\n".join(lines) + f"\n\n<b>Total spins</b>: {total}")
 
-def _compact_combo(key: str) -> str:
-    # "seven|seven|seven" -> "7️⃣7️⃣7️⃣"  (без пробелов)
-    return "".join(EMOJI[x] for x in key.split("|"))
+    name = user.full_name or (user.username and f"@{user.username}") or str(user.id)
+
+    lines = []
+    # Жирный заголовок + имя
+    lines.append(f"<b>Top combos</b> — {name}:")
+    # Комбо без пробелов между эмодзи
+    for combo, cnt in rows[:15]:
+        compact = _compact_combo(combo)  # например, "🍺🍺7️⃣"
+        lines.append(f"{compact} — {cnt}")
+
+    lines.append("")  # пустая строка
+    lines.append(f"<b>Total spins</b>: {total}")
+
+    text = "\n".join(lines)
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -171,42 +182,33 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_triples = sum(totals_by_user.values())
     top_users = sorted(totals_by_user.items(), key=lambda kv: kv[1], reverse=True)
 
-    # блоки по комбо (оставляем прежнее ограничение top-5 на каждую комбинацию)
     by = {c:[] for c in triples}
     for username, combo, c in board:
         by[combo].append(f"{username} — {c}")
 
-    # строим текст по макету, с жирными заголовками
     lines = []
     lines.append(f"<b>Total Jackpot:</b> {total_triples}")
-    lines.append("")  # пустая строка
-
+    lines.append("")
     lines.append("<b>Users Total Jackpot:</b>")
-    lines.append("")  # пустая строка
+    lines.append("")
     if top_users:
         lines.extend(f"{u} — {n}" for u, n in top_users[:10])
     else:
         lines.append("—")
-
-    lines.append("")  # пустая строка
+    lines.append("")
     lines.append("<b>Total Combination Jackpot:</b>")
-    lines.append("")  # пустая строка
-
+    lines.append("")
     for k in triples:
         header = f"{_compact_combo(k)}:"
         vals = by.get(k) or []
         if vals:
-            # top-5 как раньше
             block = [header] + vals[:5]
         else:
             block = [header, "—"]
         lines.extend(block)
-        lines.append("")  # пустая строка между комбо-блоками
-
-    # уберём последний лишний перенос
+        lines.append("")
     while lines and lines[-1] == "":
         lines.pop()
-
     text = "\n".join(lines)
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
