@@ -214,7 +214,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.full_name or (user.username and f"@{user.username}") or str(user.id)
     upsert_result(update.effective_chat.id, user.id, username, combo_key)
 
-    # NEW: if triple (jackpot) -> send random phrase
+    # if triple (jackpot) -> send random phrase
     if combo_tuple[0] == combo_tuple[1] == combo_tuple[2]:
         try:
             phrase = random.choice(JACKPOT_PHRASES)
@@ -256,7 +256,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         totals_by_user[username] = totals_by_user.get(username, 0) + c
     total_triples = sum(totals_by_user.values())
 
-    # luck list (desc by rate)
+    # luck list (desc by rate). Format: rate (≈1/N)
     spins_by_user = fetch_spins_by_username(chat_id)
     luck_rows = []
     for u, triples_cnt in totals_by_user.items():
@@ -281,7 +281,8 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("")
     if luck_rows:
         for idx, (rate, u, per_n) in enumerate(luck_rows, start=1):
-            lines.append(f"{idx}. {u} — {rate:.3f} (≈1 per {per_n} spins)")
+            # CHANGED HERE: "(≈1 per N spins)" -> "(≈1/N)"
+            lines.append(f"{idx}. {u} — {rate:.3f} (≈1/{per_n})")
     else:
         lines.append("—")
 
