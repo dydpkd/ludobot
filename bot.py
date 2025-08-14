@@ -129,4 +129,86 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     username = user.full_name or (user.username and f"@{user.username}") or str(user.id)
     upsert_result(update.effective_chat.id, user.id, username, combo_key)
-    pretty = " ".join(EMOJI[x] for x in combo_tuple
+
+    # <<< ИСПРАВЛЕНО: закрыта скобка >>>
+    pretty = " ".join(EMOJI[x] for x in combo_tuple)
+    await m.reply_text(f"Counted for {username}: {pretty}")
+
+async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    rows, total = fetch_user_stats(chat_id, user.id)
+    if not rows:
+        await update.message.reply_text("No data yet. Send 🎰 and come back.")
+        return
+    lines = []
+    for combo, cnt in rows[:15]:
+        pretty = " ".join(EMOJI[x] for x in combo.split("|"))
+        lines.append(f"{pretty} — {cnt}")
+    await update.message.reply_text(
+        "Your top combos:\n" + "\n".join(lines) + f"\n\nTotal spins: {total}"
+    )
+
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    triples = ("seven|seven|seven","grape|grape|grape","lemon|lemon|lemon","bar|bar|bar")
+    board = fetch_leaderboard(chat_id, triples)
+    if not board:
+        await update.message.reply_text("No data in this chat yet. Spin 🎰!")
+        return
+    by_combo = {c:[] for c in triples}
+    for username, combo, c in board:
+        by_combo[combo].append(f"{username} — {c}")
+    def pretty_combo(k): return " ".join(EMOJI[x] for x in k.split("|"))
+    text = "Leaders (triple matches):\n\n" + "\n\n".join(
+        f"{pretty_combo(k)}:\n" + "\n".join(v[:5]) if v else f"{pretty_combo(k)}: —"
+        for k, v in by_combo.items()
+    )
+    await update.message.reply_text(text)
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Commands:\n"
+        "/mystats — your stats\n"
+        "/stats — leaders by triple matches\n"
+        "/help — this help\n\n"
+        "Just send 🎰 in the chat — the bot will count everything."
+    )
+
+def webhook_path_from_token(token: str) -> str:
+    # short, non-revealing path derived from token hash
+    h = hashlib.sha256(token.encode()).hexdigest()[:16]
+    return f"/telegram/{h}"
+
+def build_app() -> Application:
+    if not TOKEN:
+        raise SystemExit("Set TG_TOKEN env var")
+    app = Application.builder().token(TOKEN).build()
+
+    # ВАЖНО: используем конкретный фильтр для 🎰
+    app.add_handler(MessageHandler(filters.Dice.SLOT_MACHINE, on_dice))
+
+    app.add_handler(CommandHandler("mystats", cmd_mystats))
+    app.add_handler(CommandHandler("stats", cmd_stats))
+    app.add_handler(CommandHandler("help", cmd_help))
+    return app
+
+def main():
+    app = build_app()
+    if WEBHOOK_BASE:
+        path = WEBHOOK_PATH or webhook_path_from_token(TOKEN)
+        url = WEBHOOK_BASE.rstrip('/') + path
+        log.info("Starting webhook on %s", url)
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=path,
+            webhook_url=url,
+            drop_pending_updates=True,
+        )
+    else:
+        log.info("Starting polling (no WEBHOOK_BASE set)")
+        app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
