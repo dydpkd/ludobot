@@ -3,6 +3,7 @@
 """
 Ludooman Bot — Telegram slot 🎰 tracker
 - Silent count of 🎰 spins in groups
+- On triple (jackpot) sends a random phrase from a preset list
 - SQLite stats (persistent with Railway Volume)
 - Commands: /mystats, /stats, /help
 
@@ -12,7 +13,7 @@ ENV:
   WEBHOOK_BASE   - enable webhook (https://YOUR.up.railway.app)
   WEBHOOK_PATH   - optional fixed webhook path
 """
-import os, sqlite3, logging, hashlib
+import os, sqlite3, logging, hashlib, random
 from typing import Tuple
 from telegram import Update
 from telegram.constants import ParseMode
@@ -26,6 +27,60 @@ DB_PATH = os.getenv("DB_PATH", "casino_stats.sqlite3")
 WEBHOOK_BASE = os.getenv("WEBHOOK_BASE")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH")
 PORT = int(os.getenv("PORT", "8080"))
+
+# ---- jackpot phrases (sent on triples) ----
+JACKPOT_PHRASES = [
+    "На нахуй, я богат! Теперь хоть доширак с мясом куплю.",
+    "ДА ЛАДНО! Аппарат, ты шо, заболел?",
+    "Ёб твою мать… оно реально дало?!",
+    "Вишенки мои сладкие, я вас дождался!",
+    "А вот и мой билет в мир долгов побольше.",
+    "На, сучара, я ж говорил — я твой батя!",
+    "Джекпот?! Всё, увольняюсь нахрен… завтра.",
+    "Аппарат, ты сегодня добрый, или просто издеваешься?",
+    "Ну, ёбаный в рот, вот оно, счастье с процентами.",
+    "Да ну, я ж просто мелочь хотел скрутить…",
+    "Блядь, теперь точно заберут почку, пока домой дойду.",
+    "На, в карму мне плюс, в печень минус.",
+    "Ебать, я в плюсе! На целых 5 минут.",
+    "ХА! И кто тут везунчик, мать твою!",
+    "Аппарат, ты меня что, перепутал?",
+    "Джекпот, блядь, а жизнь всё ещё говно.",
+    "Ух ты, я теперь почти как миллиардер… только без миллиардов.",
+    "Это мне за все ночи, сука!",
+    "На, держи, мозг мой, этот дофаминчик.",
+    "Сука, я ж знал, что ты любишь меня.",
+    "Ну всё, поехали в Вегас… на маршрутке.",
+    "Ебать, пошла жара!",
+    "Чисто маме на отпуск… на два дня.",
+    "Джекпот — и всё равно хата в ипотеке.",
+    "Опа, кто сегодня пьёт за мой счёт? Никто, потому что я домой.",
+    "Наконец-то! Хоть штаны новые куплю.",
+    "Аппарат, ты меня так не балуй, привыкну ведь.",
+    "А я уж думал, что ты только жрёшь…",
+    "Ну давай, ещё разок, чтоб я поверил.",
+    "Ебаный стыд, я аж заикаться начал.",
+    "Мать честная, у меня же пульс 200!",
+    "Слышь, автомат, ты чё, влюбился?",
+    "О, пошла халява — держите меня семеро.",
+    "На тебе, бывшая, вот так надо верить в мужика!",
+    "И это всё? А чё не миллион?",
+    "Ну здравствуй, иллюзия богатства.",
+    "Спасибо, автомат, теперь я в нуле.",
+    "Да ладно, неужели я в списке счастливчиков?",
+    "Твою ж мать, я ж почти ушёл…",
+    "Ну хоть не зря печень сегодня травил.",
+    "Аппарат, ты что, меня жалеешь?",
+    "Ёб твою налево, я аж икать начал.",
+    "Опа, вот и моя премия за тупость.",
+    "Ну, теперь-то я точно в плюсе… на минуту.",
+    "Это как секс без обязательств — быстро и приятно.",
+    "Джекпот, сука, я тебя вымолил!",
+    "Наконец-то мои молитвы автомату услышаны.",
+    "Пошла родная, давай ещё!",
+    "Сука, ты это специально сделал, чтоб я не ушёл?",
+    "Всё, теперь я могу сдохнуть… но с улыбкой.",
+]
 
 # ---- mapping of 1..64 to slot symbols (🍺, 🍇, 🍋, 7️⃣) ----
 slot_value = {
@@ -146,6 +201,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     d = getattr(m, "dice", None)
     if not d or d.emoji != "🎰":
         return
+    # ignore forwards
     if any(getattr(m, a, None) for a in ("forward_origin","forward_from","forward_from_chat","forward_sender_name")) \
        or getattr(m, "is_automatic_forward", False):
         return
@@ -157,7 +213,16 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     username = user.full_name or (user.username and f"@{user.username}") or str(user.id)
     upsert_result(update.effective_chat.id, user.id, username, combo_key)
-    # silent — no reply per spin
+
+    # NEW: if triple (jackpot) -> send random phrase
+    if combo_tuple[0] == combo_tuple[1] == combo_tuple[2]:
+        try:
+            phrase = random.choice(JACKPOT_PHRASES)
+            await m.reply_text(phrase)  # reply to the jackpot message
+        except Exception:
+            log.exception("Failed to send jackpot phrase")
+
+    # no reply for non-triples
 
 async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -168,15 +233,13 @@ async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     name = user.full_name or (user.username and f"@{user.username}") or str(user.id)
-
     lines = []
     lines.append(f"<b>Top combos</b> — {name}:")
     for combo, cnt in rows[:15]:
-        compact = _compact_combo(combo)  # эмодзи без пробелов
+        compact = _compact_combo(combo)
         lines.append(f"{compact} — {cnt}")
     lines.append("")
     lines.append(f"<b>Total spins</b>: {total}")
-
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -187,13 +250,13 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No data in this chat yet. Spin 🎰!")
         return
 
-    # агрегируем тройные по пользователям
+    # triples per user
     totals_by_user = {}
     for username, combo, c in board:
         totals_by_user[username] = totals_by_user.get(username, 0) + c
     total_triples = sum(totals_by_user.values())
 
-    # ---- TheMostLuckyPerson: список всех (rate = triples/spins), сортировка ПО УБЫВАНИЮ (везунчик первым)
+    # luck list (desc by rate)
     spins_by_user = fetch_spins_by_username(chat_id)
     luck_rows = []
     for u, triples_cnt in totals_by_user.items():
@@ -202,20 +265,20 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             rate = triples_cnt / spins
             per_n = int(round(spins / triples_cnt))
             luck_rows.append((rate, u, per_n))
-    luck_rows.sort(key=lambda x: x[0], reverse=True)  # убывание по rate
+    luck_rows.sort(key=lambda x: x[0], reverse=True)
 
-    # детализированные лидеры по каждой тройной комбе (сохраним пары, чтобы пронумеровать)
+    # per-combo leaders (to number later)
     by = {c:[] for c in triples}  # combo -> list[(username, count)]
     for username, combo, c in board:
         by[combo].append((username, c))
 
-    # вывод
+    # output
     lines = []
     lines.append(f"<b>Total Jackpot:</b> {total_triples}")
-    lines.append("")  # пустая строка после Total Jackpot
+    lines.append("")  # empty line after Total Jackpot
 
     lines.append("<b>TheMostLuckyPerson:</b>")
-    lines.append("")  # пустая строка после заголовка
+    lines.append("")
     if luck_rows:
         for idx, (rate, u, per_n) in enumerate(luck_rows, start=1):
             lines.append(f"{idx}. {u} — {rate:.3f} (≈1 per {per_n} spins)")
@@ -240,12 +303,11 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         vals = by.get(k) or []
         lines.append(header)
         if vals:
-            # top-5 для каждой комбо, с нумерацией
             for idx, (u, n) in enumerate(vals[:5], start=1):
                 lines.append(f"{idx}. {u} — {n}")
         else:
             lines.append("—")
-        lines.append("")  # разделитель между комбо-блоками
+        lines.append("")
 
     while lines and lines[-1] == "":
         lines.pop()
@@ -258,7 +320,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/mystats — your stats\n"
         "/stats — leaders by triple matches (with totals & luck list)\n"
         "/help — this help\n\n"
-        "Send 🎰 in the chat — I count it silently."
+        "Send 🎰 in the chat — I count it silently. Triples trigger a random phrase 😉"
     )
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
