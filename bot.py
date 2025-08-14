@@ -202,12 +202,12 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             rate = triples_cnt / spins
             per_n = int(round(spins / triples_cnt))
             luck_rows.append((rate, u, per_n))
-    luck_rows.sort(key=lambda x: x[0], reverse=True)  # <-- по убыванию
+    luck_rows.sort(key=lambda x: x[0], reverse=True)  # убывание по rate
 
-    # детализированные лидеры по каждой тройной комбе
-    by = {c:[] for c in triples}
+    # детализированные лидеры по каждой тройной комбе (сохраним пары, чтобы пронумеровать)
+    by = {c:[] for c in triples}  # combo -> list[(username, count)]
     for username, combo, c in board:
-        by[combo].append(f"{username} — {c}")
+        by[combo].append((username, c))
 
     # вывод
     lines = []
@@ -227,7 +227,8 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("")
     top_users = sorted(totals_by_user.items(), key=lambda kv: kv[1], reverse=True)
     if top_users:
-        lines.extend(f"{u} — {n}" for u, n in top_users[:10])
+        for idx, (u, n) in enumerate(top_users[:10], start=1):
+            lines.append(f"{idx}. {u} — {n}")
     else:
         lines.append("—")
 
@@ -237,12 +238,15 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for k in triples:
         header = f"{_compact_combo(k)}:"
         vals = by.get(k) or []
+        lines.append(header)
         if vals:
-            block = [header] + vals[:5]
+            # top-5 для каждой комбо, с нумерацией
+            for idx, (u, n) in enumerate(vals[:5], start=1):
+                lines.append(f"{idx}. {u} — {n}")
         else:
-            block = [header, "—"]
-        lines.extend(block)
-        lines.append("")
+            lines.append("—")
+        lines.append("")  # разделитель между комбо-блоками
+
     while lines and lines[-1] == "":
         lines.pop()
 
