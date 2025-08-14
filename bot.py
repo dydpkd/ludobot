@@ -29,22 +29,22 @@ PORT = int(os.getenv("PORT", "8080"))
 
 # ---- mapping of 1..64 to slot symbols (🍺, 🍇, 🍋, 7️⃣) ----
 slot_value = {
-    1: ("bar","bar","bar"), 2: ("grape","bar","bar"), 3: ("lemon","bar","bar"), 4: ("seven","bar","bar"),
-    5: ("bar","grape","bar"), 6: ("grape","grape","bar"), 7: ("lemon","grape","bar"), 8: ("seven","grape","bar"),
-    9: ("bar","lemon","bar"),10: ("grape","lemon","bar"),11: ("lemon","lemon","bar"),12: ("seven","lemon","bar"),
-   13: ("bar","seven","bar"),14: ("grape","seven","bar"),15: ("lemon","seven","bar"),16: ("seven","seven","bar"),
-   17: ("bar","bar","grape"),18: ("grape","bar","grape"),19: ("lemon","bar","grape"),20: ("seven","bar","grape"),
-   21: ("bar","grape","grape"),22: ("grape","grape","grape"),23: ("lemon","grape","grape"),24: ("seven","grape","grape"),
-   25: ("bar","lemon","grape"),26: ("grape","lemon","grape"),27: ("lemon","lemon","grape"),28: ("seven","lemon","grape"),
-   29: ("bar","seven","grape"),30: ("grape","seven","grape"),31: ("lemon","seven","grape"),32: ("seven","seven","grape"),
-   33: ("bar","bar","lemon"),34: ("grape","bar","lemon"),35: ("lemon","bar","lemon"),36: ("seven","bar","lemon"),
-   37: ("bar","grape","lemon"),38: ("grape","grape","lemon"),39: ("lemon","grape","lemon"),40: ("seven","grape","lemon"),
-   41: ("bar","lemon","lemon"),42: ("grape","lemon","lemon"),43: ("lemon","lemon","lemon"),44: ("seven","lemon","lemon"),
-   45: ("bar","seven","lemon"),46: ("grape","seven","lemon"),47: ("lemon","seven","lemon"),48: ("seven","seven","lemon"),
-   49: ("bar","bar","seven"),50: ("grape","bar","seven"),51: ("lemon","bar","seven"),52: ("seven","bar","seven"),
-   53: ("bar","grape","seven"),54: ("grape","grape","seven"),55: ("lemon","grape","seven"),56: ("seven","grape","seven"),
-   57: ("bar","lemon","seven"),58: ("grape","lemon","seven"),59: ("lemon","lemon","seven"),60: ("seven","lemon","seven"),
-   61: ("bar","seven","seven"),62: ("grape","seven","seven"),63: ("lemon","seven","seven"),64: ("seven","seven","seven"),
+    1: ("bar","bar","bar"),  2: ("grape","bar","bar"),  3: ("lemon","bar","bar"),  4: ("seven","bar","bar"),
+    5: ("bar","grape","bar"),6: ("grape","grape","bar"),7: ("lemon","grape","bar"),8: ("seven","grape","bar"),
+    9: ("bar","lemon","bar"),10:("grape","lemon","bar"),11:("lemon","lemon","bar"),12:("seven","lemon","bar"),
+   13: ("bar","seven","bar"),14:("grape","seven","bar"),15:("lemon","seven","bar"),16:("seven","seven","bar"),
+   17: ("bar","bar","grape"),18:("grape","bar","grape"),19:("lemon","bar","grape"),20:("seven","bar","grape"),
+   21: ("bar","grape","grape"),22:("grape","grape","grape"),23:("lemon","grape","grape"),24:("seven","grape","grape"),
+   25: ("bar","lemon","grape"),26:("grape","lemon","grape"),27:("lemon","lemon","grape"),28:("seven","lemon","grape"),
+   29: ("bar","seven","grape"),30:("grape","seven","grape"),31:("lemon","seven","grape"),32:("seven","seven","grape"),
+   33: ("bar","bar","lemon"),34:("grape","bar","lemon"),35:("lemon","bar","lemon"),36:("seven","bar","lemon"),
+   37: ("bar","grape","lemon"),38:("grape","grape","lemon"),39:("lemon","grape","lemon"),40:("seven","grape","lemon"),
+   41: ("bar","lemon","lemon"),42:("grape","lemon","lemon"),43:("lemon","lemon","lemon"),44:("seven","lemon","lemon"),
+   45: ("bar","seven","lemon"),46:("grape","seven","lemon"),47:("lemon","seven","lemon"),48:("seven","seven","lemon"),
+   49: ("bar","bar","seven"),50:("grape","bar","seven"),51:("lemon","bar","seven"),52:("seven","bar","seven"),
+   53: ("bar","grape","seven"),54:("grape","grape","seven"),55:("lemon","grape","seven"),56:("seven","grape","seven"),
+   57: ("bar","lemon","seven"),58:("grape","lemon","seven"),59:("lemon","lemon","seven"),60:("seven","lemon","seven"),
+   61: ("bar","seven","seven"),62:("grape","seven","seven"),63:("lemon","seven","seven"),64:("seven","seven","seven"),
 }
 EMOJI = {"bar":"🍺", "grape":"🍇", "lemon":"🍋", "seven":"7️⃣"}
 
@@ -119,6 +119,22 @@ def fetch_leaderboard(chat_id:int, combos:Tuple[str,...]):
       ORDER BY combo, c DESC
     """, (chat_id, *combos)).fetchall()
 
+def fetch_spins_by_username(chat_id:int):
+    """Map username -> total spins in chat (uses any stored username for user_id)."""
+    c = get_conn()
+    rows = c.execute("""
+      SELECT r.username, t.spins
+      FROM totals t
+      JOIN (
+        SELECT chat_id, user_id, MAX(username) AS username
+        FROM results
+        WHERE chat_id=?
+        GROUP BY chat_id, user_id
+      ) r ON r.chat_id=t.chat_id AND r.user_id=t.user_id
+      WHERE t.chat_id=?
+    """, (chat_id, chat_id)).fetchall()
+    return {u: s for (u, s) in rows if u is not None}
+
 # ---- Helpers ----
 def _compact_combo(key: str) -> str:
     # "seven|seven|seven" -> "7️⃣7️⃣7️⃣"  (без пробелов)
@@ -154,18 +170,14 @@ async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = user.full_name or (user.username and f"@{user.username}") or str(user.id)
 
     lines = []
-    # Жирный заголовок + имя
     lines.append(f"<b>Top combos</b> — {name}:")
-    # Комбо без пробелов между эмодзи
     for combo, cnt in rows[:15]:
-        compact = _compact_combo(combo)  # например, "🍺🍺7️⃣"
+        compact = _compact_combo(combo)  # эмодзи без пробелов
         lines.append(f"{compact} — {cnt}")
-
-    lines.append("")  # пустая строка
+    lines.append("")
     lines.append(f"<b>Total spins</b>: {total}")
 
-    text = "\n".join(lines)
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -175,22 +187,41 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No data in this chat yet. Spin 🎰!")
         return
 
-    # агрегируем сумму тройных по людям
+    # агрегируем тройные по пользователям
     totals_by_user = {}
     for username, combo, c in board:
         totals_by_user[username] = totals_by_user.get(username, 0) + c
     total_triples = sum(totals_by_user.values())
-    top_users = sorted(totals_by_user.items(), key=lambda kv: kv[1], reverse=True)
 
+    # TheMostLuckyPerson: max (triples / spins)
+    spins_by_user = fetch_spins_by_username(chat_id)
+    best_name, best_rate, best_triples, best_spins = None, -1.0, 0, 0
+    for u, triples_cnt in totals_by_user.items():
+        spins = spins_by_user.get(u, 0)
+        if spins <= 0:
+            continue
+        rate = triples_cnt / spins
+        if (rate > best_rate) or (abs(rate - best_rate) < 1e-12 and (triples_cnt > best_triples or (triples_cnt == best_triples and spins > best_spins))):
+            best_name, best_rate, best_triples, best_spins = u, rate, triples_cnt, spins
+    if best_name is not None and best_spins > 0:
+        per_n = round(best_spins / max(1, best_triples))
+        most_lucky_line = f"<b>TheMostLuckyPerson:</b> {best_name} — {best_rate:.3f} (≈1 per {per_n} spins)"
+    else:
+        most_lucky_line = "<b>TheMostLuckyPerson:</b> —"
+
+    # детализированные лидеры по каждой тройной комбе
     by = {c:[] for c in triples}
     for username, combo, c in board:
         by[combo].append(f"{username} — {c}")
 
+    # вывод
     lines = []
     lines.append(f"<b>Total Jackpot:</b> {total_triples}")
+    lines.append(most_lucky_line)
     lines.append("")
     lines.append("<b>Users Total Jackpot:</b>")
     lines.append("")
+    top_users = sorted(totals_by_user.items(), key=lambda kv: kv[1], reverse=True)
     if top_users:
         lines.extend(f"{u} — {n}" for u, n in top_users[:10])
     else:
@@ -209,14 +240,14 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("")
     while lines and lines[-1] == "":
         lines.pop()
-    text = "\n".join(lines)
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Commands:\n"
         "/mystats — your stats\n"
-        "/stats — leaders by triple matches (with totals)\n"
+        "/stats — leaders by triple matches (with totals and luckiest user)\n"
         "/help — this help\n\n"
         "Send 🎰 in the chat — I count it silently."
     )
