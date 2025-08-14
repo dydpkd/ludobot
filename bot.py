@@ -41,18 +41,18 @@ slot_value = {
    29: ("bar","seven","grape"),30: ("grape","seven","grape"),31: ("lemon","seven","grape"),32: ("seven","seven","grape"),
    33: ("bar","bar","lemon"),34: ("grape","bar","lemon"),35: ("lemon","bar","lemon"),36: ("seven","bar","lemon"),
    37: ("bar","grape","lemon"),38: ("grape","grape","lemon"),39: ("lemon","grape","lemon"),40: ("seven","grape","lemon"),
-   41: ("bar","lemon","lemon"),42: ("grape","lemon","lemon"),43: ("lemon","lemon","lemon"),44: ("seven","lemon","lemon"),
+   41: ("bar","lemon","lemon"),42: ("grape","lemon","леmon"),43: ("lemon","lemon","lemon"),44: ("seven","lemon","lemon"),
    45: ("bar","seven","lemon"),46: ("grape","seven","lemon"),47: ("lemon","seven","lemon"),48: ("seven","seven","lemon"),
    49: ("bar","bar","seven"),50: ("grape","bar","seven"),51: ("lemon","bar","seven"),52: ("seven","bar","seven"),
    53: ("bar","grape","seven"),54: ("grape","grape","seven"),55: ("lemon","grape","seven"),56: ("seven","grape","seven"),
    57: ("bar","lemon","seven"),58: ("grape","lemon","seven"),59: ("lemon","lemon","seven"),60: ("seven","lemon","seven"),
    61: ("bar","seven","seven"),62: ("grape","seven","seven"),63: ("lemon","seven","seven"),64: ("seven","seven","seven"),
 }
+# Use 🍺 instead of text BAR
 EMOJI = {"bar":"🍺", "grape":"🍇", "lemon":"🍋", "seven":"7️⃣"}
 
 # ---- DB ----
 _conn = None
-
 def get_conn() -> sqlite3.Connection:
     global _conn
     if _conn is None:
@@ -120,12 +120,10 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     d = getattr(m, "dice", None)
     if not d or d.emoji != "🎰":
         return
-
-    # корректная проверка «переслано» для PTB v20+:
+    # ignore forwards (PTB v20+ fields)
     if any(getattr(m, attr, None) for attr in ("forward_origin", "forward_from", "forward_from_chat", "forward_sender_name")) \
        or getattr(m, "is_automatic_forward", False):
         return
-
     value = int(d.value)
     combo_tuple = slot_value.get(value)
     if not combo_tuple:
@@ -134,9 +132,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     username = user.full_name or (user.username and f"@{user.username}") or str(user.id)
     upsert_result(update.effective_chat.id, user.id, username, combo_key)
-
-    # По запросу: никаких ответов на каждую крутку
-    # (оставляем тишину, чтобы не спамить чат)
+    # silent mode: no reply on each spin
 
 async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -145,17 +141,14 @@ async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not rows:
         await update.message.reply_text("No data yet. Send 🎰 and come back.")
         return
-    name = user.full_name or user.first_name or "You"
     lines = []
     for combo, cnt in rows[:15]:
         pretty = " ".join(EMOJI[x] for x in combo.split("|"))
         lines.append(f"{pretty} — {cnt}")
+    # header with requester's name
+    name = user.full_name or (user.username and f"@{user.username}") or str(user.id)
     await update.message.reply_text(
-        f"Top combos — {name}:
-" + "
-".join(lines) + f"
-
-Total spins: {total}"
+        f"Top combos — {name}:\n" + "\n".join(lines) + f"\n\nTotal spins: {total}"
     )
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -169,30 +162,19 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for username, combo, c in board:
         by_combo[combo].append(f"{username} — {c}")
     def pretty_combo(k): return " ".join(EMOJI[x] for x in k.split("|"))
-    text = "Leaders (triple matches):
-
-" + "
-
-".join(
-        f"{pretty_combo(k)}:
-" + "
-".join(v[:5]) if v else f"{pretty_combo(k)}: —"
+    text = "Leaders (triple matches):\n\n" + "\n\n".join(
+        f"{pretty_combo(k)}:\n" + "\n".join(v[:5]) if v else f"{pretty_combo(k)}: —"
         for k, v in by_combo.items()
     )
     await update.message.reply_text(text)
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Commands:
-"
-        "/mystats — your stats
-"
-        "/stats — leaders by triple matches
-"
-        "/help — this help
-
-"
-        "Just send 🎰 in the chat — the bot will count everything."
+        "Commands:\n"
+        "/mystats — your stats\n"
+        "/stats — leaders by triple matches\n"
+        "/help — this help\n\n"
+        "Send 🎰 in the chat — I’ll count it silently."
     )
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -206,8 +188,7 @@ def build_app() -> Application:
     if not TOKEN:
         raise SystemExit("Set TG_TOKEN env var")
     app = Application.builder().token(TOKEN).build()
-
-    # ловим именно 🎰
+    # catch exactly 🎰
     app.add_handler(MessageHandler(filters.Dice.SLOT_MACHINE, on_dice))
     app.add_handler(CommandHandler("mystats", cmd_mystats))
     app.add_handler(CommandHandler("stats", cmd_stats))
