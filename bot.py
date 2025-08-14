@@ -29,22 +29,22 @@ PORT = int(os.getenv("PORT", "8080"))
 
 # ---- mapping of 1..64 to slot symbols (🍺, 🍇, 🍋, 7️⃣) ----
 slot_value = {
-    1: ("bar","bar","bar"),  2: ("grape","bar","bar"),  3: ("lemon","bar","bar"),  4: ("seven","bar","bar"),
-    5: ("bar","grape","bar"),6: ("grape","grape","bar"),7: ("lemon","grape","bar"),8: ("seven","grape","bar"),
-    9: ("bar","lemon","bar"),10:("grape","lemon","bar"),11:("lemon","lemon","bar"),12:("seven","lemon","bar"),
-   13: ("bar","seven","bar"),14:("grape","seven","bar"),15:("lemon","seven","bar"),16:("seven","seven","bar"),
-   17: ("bar","bar","grape"),18:("grape","bar","grape"),19:("lemon","bar","grape"),20:("seven","bar","grape"),
-   21: ("bar","grape","grape"),22:("grape","grape","grape"),23:("lemon","grape","grape"),24:("seven","grape","grape"),
-   25: ("bar","lemon","grape"),26:("grape","lemon","grape"),27:("lemon","lemon","grape"),28:("seven","lemon","grape"),
-   29: ("bar","seven","grape"),30:("grape","seven","grape"),31:("lemon","seven","grape"),32:("seven","seven","grape"),
-   33: ("bar","bar","lemon"),34:("grape","bar","lemon"),35:("lemon","bar","lemon"),36:("seven","bar","lemon"),
-   37: ("bar","grape","lemon"),38:("grape","grape","lemon"),39:("lemon","grape","lemon"),40:("seven","grape","lemon"),
-   41: ("bar","lemon","lemon"),42:("grape","lemon","lemon"),43:("lemon","lemon","lemon"),44:("seven","lemon","lemon"),
-   45: ("bar","seven","lemon"),46:("grape","seven","lemon"),47:("lemon","seven","lemon"),48:("seven","seven","lemon"),
-   49: ("bar","bar","seven"),50:("grape","bar","seven"),51:("lemon","bar","seven"),52:("seven","bar","seven"),
-   53: ("bar","grape","seven"),54:("grape","grape","seven"),55:("lemon","grape","seven"),56:("seven","grape","seven"),
-   57: ("bar","lemon","seven"),58:("grape","lemon","seven"),59:("lemon","lemon","seven"),60:("seven","lemon","seven"),
-   61: ("bar","seven","seven"),62:("grape","seven","seven"),63:("lemon","seven","seven"),64:("seven","seven","seven"),
+    1: ("bar","bar","bar"), 2: ("grape","bar","bar"), 3: ("lemon","bar","bar"), 4: ("seven","bar","bar"),
+    5: ("bar","grape","bar"), 6: ("grape","grape","bar"), 7: ("lemon","grape","bar"), 8: ("seven","grape","bar"),
+    9: ("bar","lemon","bar"),10: ("grape","lemon","bar"),11: ("lemon","lemon","bar"),12: ("seven","lemon","bar"),
+   13: ("bar","seven","bar"),14: ("grape","seven","bar"),15: ("lemon","seven","bar"),16: ("seven","seven","bar"),
+   17: ("bar","bar","grape"),18: ("grape","bar","grape"),19: ("lemon","bar","grape"),20: ("seven","bar","grape"),
+   21: ("bar","grape","grape"),22: ("grape","grape","grape"),23: ("lemon","grape","grape"),24: ("seven","grape","grape"),
+   25: ("bar","lemon","grape"),26: ("grape","lemon","grape"),27: ("lemon","lemon","grape"),28: ("seven","lemon","grape"),
+   29: ("bar","seven","grape"),30: ("grape","seven","grape"),31: ("lemon","seven","grape"),32: ("seven","seven","grape"),
+   33: ("bar","bar","lemon"),34: ("grape","bar","lemon"),35: ("lemon","bar","lemon"),36: ("seven","bar","lemon"),
+   37: ("bar","grape","lemon"),38: ("grape","grape","lemon"),39: ("lemon","grape","lemon"),40: ("seven","grape","lemon"),
+   41: ("bar","lemon","lemon"),42: ("grape","lemon","lemon"),43: ("lemon","lemon","lemon"),44: ("seven","lemon","lemon"),
+   45: ("bar","seven","lemon"),46: ("grape","seven","lemon"),47: ("lemon","seven","lemon"),48: ("seven","seven","lemon"),
+   49: ("bar","bar","seven"),50: ("grape","bar","seven"),51: ("lemon","bar","seven"),52: ("seven","bar","seven"),
+   53: ("bar","grape","seven"),54: ("grape","grape","seven"),55: ("lemon","grape","seven"),56: ("seven","grape","seven"),
+   57: ("bar","lemon","seven"),58: ("grape","lemon","seven"),59: ("lemon","lemon","seven"),60: ("seven","lemon","seven"),
+   61: ("bar","seven","seven"),62: ("grape","seven","seven"),63: ("lemon","seven","seven"),64: ("seven","seven","seven"),
 }
 EMOJI = {"bar":"🍺", "grape":"🍇", "lemon":"🍋", "seven":"7️⃣"}
 
@@ -193,21 +193,16 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         totals_by_user[username] = totals_by_user.get(username, 0) + c
     total_triples = sum(totals_by_user.values())
 
-    # TheMostLuckyPerson: max (triples / spins)
+    # ---- TheMostLuckyPerson: список всех (rate = triples/spins), сортировка по возрастанию
     spins_by_user = fetch_spins_by_username(chat_id)
-    best_name, best_rate, best_triples, best_spins = None, -1.0, 0, 0
+    luck_rows = []
     for u, triples_cnt in totals_by_user.items():
         spins = spins_by_user.get(u, 0)
-        if spins <= 0:
-            continue
-        rate = triples_cnt / spins
-        if (rate > best_rate) or (abs(rate - best_rate) < 1e-12 and (triples_cnt > best_triples or (triples_cnt == best_triples and spins > best_spins))):
-            best_name, best_rate, best_triples, best_spins = u, rate, triples_cnt, spins
-    if best_name is not None and best_spins > 0:
-        per_n = round(best_spins / max(1, best_triples))
-        most_lucky_line = f"<b>TheMostLuckyPerson:</b> {best_name} — {best_rate:.3f} (≈1 per {per_n} spins)"
-    else:
-        most_lucky_line = "<b>TheMostLuckyPerson:</b> —"
+        if spins > 0 and triples_cnt > 0:
+            rate = triples_cnt / spins
+            per_n = int(round(spins / triples_cnt))
+            luck_rows.append((rate, u, per_n))
+    luck_rows.sort(key=lambda x: x[0])  # по возрастанию rate
 
     # детализированные лидеры по каждой тройной комбе
     by = {c:[] for c in triples}
@@ -217,7 +212,16 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # вывод
     lines = []
     lines.append(f"<b>Total Jackpot:</b> {total_triples}")
-    lines.append(most_lucky_line)
+    lines.append("")  # пустая строка после Total Jackpot
+
+    lines.append("<b>TheMostLuckyPerson:</b>")
+    lines.append("")  # пустая строка после заголовка
+    if luck_rows:
+        for idx, (rate, u, per_n) in enumerate(luck_rows, start=1):
+            lines.append(f"{idx}. {u} — {rate:.3f} (≈1 per {per_n} spins)")
+    else:
+        lines.append("—")
+
     lines.append("")
     lines.append("<b>Users Total Jackpot:</b>")
     lines.append("")
@@ -226,6 +230,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.extend(f"{u} — {n}" for u, n in top_users[:10])
     else:
         lines.append("—")
+
     lines.append("")
     lines.append("<b>Total Combination Jackpot:</b>")
     lines.append("")
@@ -247,7 +252,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Commands:\n"
         "/mystats — your stats\n"
-        "/stats — leaders by triple matches (with totals and luckiest user)\n"
+        "/stats — leaders by triple matches (with totals & luck list)\n"
         "/help — this help\n\n"
         "Send 🎰 in the chat — I count it silently."
     )
