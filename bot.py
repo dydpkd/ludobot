@@ -28,22 +28,22 @@ PORT = int(os.getenv("PORT", "8080"))
 
 # ---- mapping of 1..64 to slot symbols (🍺, 🍇, 🍋, 7️⃣) ----
 slot_value = {
-    1: ("bar","bar","bar"), 2: ("grape","bar","bar"), 3: ("lemon","bar","bar"), 4: ("seven","bar","bar"),
-    5: ("bar","grape","bar"), 6: ("grape","grape","bar"), 7: ("lemon","grape","bar"), 8: ("seven","grape","bar"),
-    9: ("bar","lemon","bar"),10: ("grape","lemon","bar"),11: ("lemon","lemon","bar"),12: ("seven","lemon","bar"),
-   13: ("bar","seven","bar"),14: ("grape","seven","bar"),15: ("lemon","seven","bar"),16: ("seven","seven","bar"),
-   17: ("bar","bar","grape"),18: ("grape","bar","grape"),19: ("lemon","bar","grape"),20: ("seven","bar","grape"),
-   21: ("bar","grape","grape"),22: ("grape","grape","grape"),23: ("lemon","grape","grape"),24: ("seven","grape","grape"),
-   25: ("bar","lemon","grape"),26: ("grape","lemon","grape"),27: ("lemon","lemon","grape"),28: ("seven","lemon","grape"),
-   29: ("bar","seven","grape"),30: ("grape","seven","grape"),31: ("lemon","seven","grape"),32: ("seven","seven","grape"),
-   33: ("bar","bar","lemon"),34: ("grape","bar","lemon"),35: ("lemon","bar","lemon"),36: ("seven","bar","lemon"),
-   37: ("bar","grape","lemon"),38: ("grape","grape","lemon"),39: ("lemon","grape","lemon"),40: ("seven","grape","lemon"),
-   41: ("bar","lemon","lemon"),42: ("grape","lemon","lemon"),43: ("lemon","lemon","lemon"),44: ("seven","lemon","lemon"),
-   45: ("bar","seven","lemon"),46: ("grape","seven","lemon"),47: ("lemon","seven","lemon"),48: ("seven","seven","lemon"),
-   49: ("bar","bar","seven"),50: ("grape","bar","seven"),51: ("lemon","bar","seven"),52: ("seven","bar","seven"),
-   53: ("bar","grape","seven"),54: ("grape","grape","seven"),55: ("lemon","grape","seven"),56: ("seven","grape","seven"),
-   57: ("bar","lemon","seven"),58: ("grape","lemon","seven"),59: ("lemon","lemon","seven"),60: ("seven","lemon","seven"),
-   61: ("bar","seven","seven"),62: ("grape","seven","seven"),63: ("lemon","seven","seven"),64: ("seven","seven","seven"),
+     1: ("bar","bar","bar"),  2: ("grape","bar","bar"),  3: ("lemon","bar","bar"),  4: ("seven","bar","bar"),
+     5: ("bar","grape","bar"),6: ("grape","grape","bar"),7: ("lemon","grape","bar"),8: ("seven","grape","bar"),
+     9: ("bar","lemon","bar"),10:("grape","lemon","bar"),11:("lemon","lemon","bar"),12:("seven","lemon","bar"),
+    13: ("bar","seven","bar"),14:("grape","seven","bar"),15:("lemon","seven","bar"),16:("seven","seven","bar"),
+    17: ("bar","bar","grape"),18:("grape","bar","grape"),19:("lemon","bar","grape"),20:("seven","bar","grape"),
+    21: ("bar","grape","grape"),22:("grape","grape","grape"),23:("lemon","grape","grape"),24:("seven","grape","grape"),
+    25: ("bar","lemon","grape"),26:("grape","lemon","grape"),27:("lemon","lemon","grape"),28:("seven","lemon","grape"),
+    29: ("bar","seven","grape"),30:("grape","seven","grape"),31:("lemon","seven","grape"),32:("seven","seven","grape"),
+    33: ("bar","bar","lemon"),34:("grape","bar","lemon"),35:("lemon","bar","lemon"),36:("seven","bar","lemon"),
+    37: ("bar","grape","lemon"),38:("grape","grape","lemon"),39:("lemon","grape","lemon"),40:("seven","grape","lemon"),
+    41: ("bar","lemon","lemon"),42:("grape","lemon","lemon"),43:("lemon","lemon","lemon"),44:("seven","lemon","lemon"),
+    45: ("bar","seven","lemon"),46:("grape","seven","lemon"),47:("lemon","seven","lemon"),48:("seven","seven","lemon"),
+    49: ("bar","bar","seven"),50:("grape","bar","seven"),51:("lemon","bar","seven"),52:("seven","bar","seven"),
+    53: ("bar","grape","seven"),54:("grape","grape","seven"),55:("lemon","grape","seven"),56:("seven","grape","seven"),
+    57: ("bar","lemon","seven"),58:("grape","lemon","seven"),59:("lemon","lemon","seven"),60:("seven","lemon","seven"),
+    61: ("bar","seven","seven"),62:("grape","seven","seven"),63:("lemon","seven","seven"),64:("seven","seven","seven"),
 }
 EMOJI = {"bar":"🍺", "grape":"🍇", "lemon":"🍋", "seven":"7️⃣"}
 
@@ -124,6 +124,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     d = getattr(m, "dice", None)
     if not d or d.emoji != "🎰":
         return
+    # ignore forwards (PTB v20+ fields)
     if any(getattr(m, a, None) for a in ("forward_origin","forward_from","forward_from_chat","forward_sender_name")) \
        or getattr(m, "is_automatic_forward", False):
         return
@@ -153,22 +154,32 @@ async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    # четыре "тройных" комбо
     triples = ("seven|seven|seven","grape|grape|grape","lemon|lemon|lemon","bar|bar|bar")
     board = fetch_leaderboard(chat_id, triples)
     if not board:
         await update.message.reply_text("No data in this chat yet. Spin 🎰!")
         return
 
-    # NEW: total number of triple matches across the chat (sum of all four triples)
-    total_triples = sum(c for _, _, c in board)
+    # ✅ Новое: агрегируем сумму всех тройных выпадений по именам (username)
+    totals_by_user = {}
+    for username, combo, c in board:
+        totals_by_user[username] = totals_by_user.get(username, 0) + c
+    total_triples = sum(totals_by_user.values())
+    top_users = sorted(totals_by_user.items(), key=lambda kv: kv[1], reverse=True)
+    top_users_lines = [f"{u} — {n}" for u, n in top_users[:10]]  # покажем ТОП-10
 
+    # Старый блок: лидеры по каждой конкретной тройной комбе
     by = {c:[] for c in triples}
     for username, combo, c in board:
         by[combo].append(f"{username} — {c}")
     def pc(k): return " ".join(EMOJI[x] for x in k.split("|"))
+
     text = (
-        f"Total triple matches: {total_triples}\n\n"
-        "Leaders (triple matches):\n\n"
+        f"Total triple matches (all users): {total_triples}\n"
+        "By users (sum of all triple combos):\n"
+        + ("\n".join(top_users_lines) if top_users_lines else "—")
+        + "\n\nLeaders (triple matches by combo):\n\n"
         + "\n\n".join(
             f"{pc(k)}:\n" + "\n".join(v[:5]) if v else f"{pc(k)}: —"
             for k, v in by.items()
@@ -180,7 +191,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Commands:\n"
         "/mystats — your stats\n"
-        "/stats — leaders by triple matches\n"
+        "/stats — leaders by triple matches (with totals per user)\n"
         "/help — this help\n\n"
         "Send 🎰 in the chat — I count it silently."
     )
