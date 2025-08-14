@@ -193,7 +193,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         totals_by_user[username] = totals_by_user.get(username, 0) + c
     total_triples = sum(totals_by_user.values())
 
-    # ---- TheMostLuckyPerson: список всех (rate = triples/spins), сортировка по возрастанию
+    # ---- TheMostLuckyPerson: список всех (rate = triples/spins), сортировка ПО УБЫВАНИЮ (везунчик первым)
     spins_by_user = fetch_spins_by_username(chat_id)
     luck_rows = []
     for u, triples_cnt in totals_by_user.items():
@@ -202,7 +202,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             rate = triples_cnt / spins
             per_n = int(round(spins / triples_cnt))
             luck_rows.append((rate, u, per_n))
-    luck_rows.sort(key=lambda x: x[0])  # по возрастанию rate
+    luck_rows.sort(key=lambda x: x[0], reverse=True)  # <-- по убыванию
 
     # детализированные лидеры по каждой тройной комбе
     by = {c:[] for c in triples}
