@@ -82,6 +82,20 @@ JACKPOT_PHRASES = [
     "Всё, теперь я могу сдохнуть… но с улыбкой.",
 ]
 
+# Non-repeating cycle for jackpot phrases
+_jackpot_cycle_remaining = []
+_jackpot_cycle_lock = None
+async def get_next_jackpot_phrase() -> str:
+    global _jackpot_cycle_lock
+    if _jackpot_cycle_lock is None:
+        _jackpot_cycle_lock = asyncio.Lock()
+    async with _jackpot_cycle_lock:
+        global _jackpot_cycle_remaining
+        if not _jackpot_cycle_remaining:
+            _jackpot_cycle_remaining = JACKPOT_PHRASES[:]
+            random.shuffle(_jackpot_cycle_remaining)
+        return _jackpot_cycle_remaining.pop()
+
 # ---- mapping of 1..64 to slot symbols (🍺, 🍇, 🍋, 7️⃣) ----
 slot_value = {
     1: ("bar","bar","bar"), 2: ("grape","bar","bar"), 3: ("lemon","bar","bar"), 4: ("seven","bar","bar"),
@@ -119,7 +133,7 @@ def get_conn() -> sqlite3.Connection:
             os.makedirs("/tmp", exist_ok=True)
             _conn = sqlite3.connect(fallback, check_same_thread=False)
 
-        __conn.execute("""
+        _conn.execute("""
         CREATE TABLE IF NOT EXISTS results(
             chat_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
@@ -214,16 +228,24 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.full_name or (user.username and f"@{user.username}") or str(user.id)
     upsert_result(update.effective_chat.id, user.id, username, combo_key)
 
-    # if triple (jackpot) -> 2s delay + random phrase
+    # if triple (jackpot) -> 2s delay + non-repeating random phrase
     if combo_tuple[0] == combo_tuple[1] == combo_tuple[2]:
         try:
             await asyncio.sleep(3)  # неблокирующая задержка
-            phrase = random.choice(JACKPOT_PHRASES)
+            phrase = await get_next_jackpot_phrase()
             await m.reply_text(phrase)  # reply to the jackpot message
         except Exception:
             log.exception("Failed to send jackpot phrase")
+    else:
+        # near-jackpot: exactly two identical symbols (one short of a triple)
+        if len(set(combo_tuple)) == 2:
+            try:
+                if random.randint(1, 10) == 1:
+                    await m.reply_text("Джекпот - хуй тебе в рот!")
+            except Exception:
+                log.exception("Failed to send near-jackpot phrase")
 
-    # no reply for non-triples
+    # no reply for other combinations
 
 async def cmd_mystats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
