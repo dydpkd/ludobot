@@ -3,15 +3,19 @@
 """
 Ludooman Bot — Telegram slot 🎰 tracker
 - Silent count of 🎰 spins in groups
-- On triple (jackpot) sends a random phrase from a preset list (with 4.1s delay)
+- On triple (jackpot) sends a random phrase from a preset list
+- Occasionally reacts to near-jackpot (two-of-a-kind) with a random phrase after a random delay
 - SQLite stats (persistent with Railway Volume)
 - Commands: /mystats, /stats, /help
 
 ENV:
-  TG_TOKEN       - required
-  DB_PATH        - default ./casino_stats.sqlite3 (use /data/... with Railway Volume)
-  WEBHOOK_BASE   - enable webhook (https://YOUR.up.railway.app)
-  WEBHOOK_PATH   - optional fixed webhook path
+  TG_TOKEN                - required
+  DB_PATH                 - default ./casino_stats.sqlite3 (use /data/... with Railway Volume)
+  WEBHOOK_BASE            - enable webhook (https://YOUR.up.railway.app)
+  WEBHOOK_PATH            - optional fixed webhook path
+  JACKPOT_DELAY           - delay before jackpot reply in seconds (default 4.1)
+  NEAR_JACKPOT_DELAY_MIN  - min delay before near-jackpot reply (default 4.5)
+  NEAR_JACKPOT_DELAY_MAX  - max delay before near-jackpot reply (default 10)
 """
 import os, sqlite3, logging, hashlib, random, asyncio
 from typing import Tuple
@@ -27,6 +31,9 @@ DB_PATH = os.getenv("DB_PATH", "casino_stats.sqlite3")
 WEBHOOK_BASE = os.getenv("WEBHOOK_BASE")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH")
 PORT = int(os.getenv("PORT", "8080"))
+JACKPOT_DELAY = float(os.getenv("JACKPOT_DELAY", "4.1"))
+NEAR_JACKPOT_DELAY_MIN = float(os.getenv("NEAR_JACKPOT_DELAY_MIN", "4.5"))
+NEAR_JACKPOT_DELAY_MAX = float(os.getenv("NEAR_JACKPOT_DELAY_MAX", "10"))
 
 # ---- jackpot phrases (sent on triples) ----
 JACKPOT_PHRASES = [
@@ -240,10 +247,10 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.full_name or (user.username and f"@{user.username}") or str(user.id)
     upsert_result(update.effective_chat.id, user.id, username, combo_key)
 
-    # if triple (jackpot) -> 4.1s delay + non-repeating random phrase
+    # if triple (jackpot) -> configurable delay + non-repeating random phrase
     if combo_tuple[0] == combo_tuple[1] == combo_tuple[2]:
         try:
-            await asyncio.sleep(4.1)  # неблокирующая задержка
+            await asyncio.sleep(JACKPOT_DELAY)  # неблокирующая задержка
             phrase = await get_next_jackpot_phrase()
             await m.reply_text(phrase)  # reply to the jackpot message
         except Exception:
@@ -253,7 +260,8 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(set(combo_tuple)) == 2:
             try:
                 if random.randint(1, 9) == 1:
-                    await asyncio.sleep(4.1)
+                    # random delay between configured bounds
+                    await asyncio.sleep(random.uniform(NEAR_JACKPOT_DELAY_MIN, NEAR_JACKPOT_DELAY_MAX))
                     await m.reply_text(random.choice(NEAR_JACKPOT_PHRASES))
             except Exception:
                 log.exception("Failed to send near-jackpot phrase")
@@ -356,7 +364,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/mystats — your stats\n"
         "/stats — leaders by triple matches (with totals & luck list)\n"
         "/help — this help\n\n"
-        "Send 🎰 in the chat — I count it silently. Triples trigger a random phrase (after 4.1s) 😉"
+        f"Send 🎰 in the chat — I count it silently. Triples trigger a random phrase (after {JACKPOT_DELAY}s) 😉"
     )
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
