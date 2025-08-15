@@ -253,6 +253,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(set(combo_tuple)) == 2:
             try:
                 if random.randint(1, 9) == 1:
+                    await asyncio.sleep(4)
                     await m.reply_text(random.choice(NEAR_JACKPOT_PHRASES))
             except Exception:
                 log.exception("Failed to send near-jackpot phrase")
