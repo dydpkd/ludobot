@@ -114,7 +114,7 @@ slot_value = {
     5: ("bar","grape","bar"), 6: ("grape","grape","bar"), 7: ("lemon","grape","bar"), 8: ("seven","grape","bar"),
     9: ("bar","lemon","bar"),10: ("grape","lemon","bar"),11: ("lemon","lemon","bar"),12: ("seven","lemon","bar"),
    13: ("bar","seven","bar"),14: ("grape","seven","bar"),15: ("lemon","seven","bar"),16: ("seven","seven","bar"),
-   17: ("bar","bar","grape"),18: ("grape","bar","grape"),19: ("lemon","bar","grape"),20: ("seven","bar","grape"),
+   17: ("bar","bar","grape"),18: ("grape","bar","грape"),19: ("lemon","bar","grape"),20: ("seven","bar","grape"),
    21: ("bar","grape","grape"),22: ("grape","grape","grape"),23: ("lemon","grape","grape"),24: ("seven","grape","grape"),
    25: ("bar","lemon","grape"),26: ("grape","lemon","grape"),27: ("lemon","lemon","grape"),28: ("seven","lemon","grape"),
    29: ("bar","seven","grape"),30: ("grape","seven","grape"),31: ("lemon","seven","grape"),32: ("seven","seven","grape"),
@@ -240,10 +240,10 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.full_name or (user.username and f"@{user.username}") or str(user.id)
     upsert_result(update.effective_chat.id, user.id, username, combo_key)
 
-    # if triple (jackpot) -> 2s delay + non-repeating random phrase
+    # if triple (jackpot) -> 4s delay + non-repeating random phrase
     if combo_tuple[0] == combo_tuple[1] == combo_tuple[2]:
         try:
-            await asyncio.sleep(3)  # неблокирующая задержка
+            await asyncio.sleep(4)  # неблокирующая задержка
             phrase = await get_next_jackpot_phrase()
             await m.reply_text(phrase)  # reply to the jackpot message
         except Exception:
@@ -253,6 +253,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(set(combo_tuple)) == 2:
             try:
                 if random.randint(1, 9) == 1:
+                    await asyncio.sleep(4)
                     await m.reply_text(random.choice(NEAR_JACKPOT_PHRASES))
             except Exception:
                 log.exception("Failed to send near-jackpot phrase")
