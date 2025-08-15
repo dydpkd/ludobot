@@ -3,7 +3,7 @@
 """
 Ludooman Bot — Telegram slot 🎰 tracker
 - Silent count of 🎰 spins in groups
-- On triple (jackpot) sends a random phrase from a preset list (with 4s delay)
+- On triple (jackpot) sends a random phrase from a preset list (with 4.1s delay)
 - SQLite stats (persistent with Railway Volume)
 - Commands: /mystats, /stats, /help
 
@@ -240,10 +240,10 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.full_name or (user.username and f"@{user.username}") or str(user.id)
     upsert_result(update.effective_chat.id, user.id, username, combo_key)
 
-    # if triple (jackpot) -> 4s delay + non-repeating random phrase
+    # if triple (jackpot) -> 4.1s delay + non-repeating random phrase
     if combo_tuple[0] == combo_tuple[1] == combo_tuple[2]:
         try:
-            await asyncio.sleep(4)  # неблокирующая задержка
+            await asyncio.sleep(4.1)  # неблокирующая задержка
             phrase = await get_next_jackpot_phrase()
             await m.reply_text(phrase)  # reply to the jackpot message
         except Exception:
@@ -253,7 +253,7 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(set(combo_tuple)) == 2:
             try:
                 if random.randint(1, 9) == 1:
-                    await asyncio.sleep(4)
+                    await asyncio.sleep(4.1)
                     await m.reply_text(random.choice(NEAR_JACKPOT_PHRASES))
             except Exception:
                 log.exception("Failed to send near-jackpot phrase")
@@ -356,7 +356,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/mystats — your stats\n"
         "/stats — leaders by triple matches (with totals & luck list)\n"
         "/help — this help\n\n"
-        "Send 🎰 in the chat — I count it silently. Triples trigger a random phrase (after 2s) 😉"
+        "Send 🎰 in the chat — I count it silently. Triples trigger a random phrase (after 4.1s) 😉"
     )
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
