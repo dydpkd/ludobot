@@ -3,7 +3,7 @@
 """
 Ludooman Bot — Telegram slot 🎰 tracker
 - Silent count of 🎰 spins in groups
-- On triple (jackpot) sends a random phrase from a preset list (with 2s delay)
+- On triple (jackpot) sends a random phrase from a preset list (with 4s delay)
 - SQLite stats (persistent with Railway Volume)
 - Commands: /mystats, /stats, /help
 
