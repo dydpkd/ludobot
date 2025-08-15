@@ -82,6 +82,18 @@ JACKPOT_PHRASES = [
     "Всё, теперь я могу сдохнуть… но с улыбкой.",
 ]
 
+# ---- near-jackpot phrases (sent with small chance on two-of-a-kind) ----
+NEAR_JACKPOT_PHRASES = [
+    "Джекпот - хуй тебе в рот!",
+    "Сосал?",
+    "Пососал?",
+    "Соснул?",
+    "Ебать ты лох брат...",
+    "Хватит крутить, очнись",
+    "Как же ты жалок",
+    "Ебаное все блять...",
+]
+
 # Non-repeating cycle for jackpot phrases
 _jackpot_cycle_remaining = []
 _jackpot_cycle_lock = None
@@ -240,8 +252,8 @@ async def on_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # near-jackpot: exactly two identical symbols (one short of a triple)
         if len(set(combo_tuple)) == 2:
             try:
-                if random.randint(1, 10) == 1:
-                    await m.reply_text("Джекпот - хуй тебе в рот!")
+                if random.randint(1, 9) == 1:
+                    await m.reply_text(random.choice(NEAR_JACKPOT_PHRASES))
             except Exception:
                 log.exception("Failed to send near-jackpot phrase")
 
